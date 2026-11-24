@@ -532,11 +532,15 @@ class Game:
         self.cr_stare = 0.0
         self.cr_step = 0.0
         self.cr_seen = False
+        self.cr_warned = 0.0
+        self.fear_side = 0.0
         self.cr_watched = False
         self.cr_dist = 99.0
         self.fear = 0.0
         self.fake_eyes = None
         self.next_scare = 25.0
+        self.next_gust = 70.0
+        self.gust_until = 0.0
         self.warned = set()
         self.fw_heat = [[0.0] * 13 for _ in range(12)]
         self.flick = 1.0
@@ -583,11 +587,15 @@ class Game:
                 return True
         return False
 
-    def los(self, ax, ay, bx, by):
+    def los(self, ax, ay, bx, by, skip=0.0):
+        """True if nothing blocks the view from a to b. Trees closer than `skip`
+        to a are ignored (the renderer draws those see-through)."""
         d = math.hypot(bx - ax, by - ay)
         steps = int(d / 0.5)
         for s in range(1, steps):
             k = s / steps
+            if k * d < skip:
+                continue
             if self.tree_hit(ax + (bx - ax) * k, ay + (by - ay) * k, 0.35):
                 return False
         return True
@@ -689,7 +697,7 @@ class Game:
         fwd = self.held_axis(inp, ("w", "up"), ("s", "down"))
         strafe = self.held_axis(inp, ("d",), ("a",))
         turn = self.held_axis(inp, ("right", "l"), ("left", "j"))
-        da = turn * 2.1 * dt
+        da = turn * 2.8 * dt
         self.a = (self.a + da) % TAU
         self.turned += da
         running = inp.running() and fwd > 0 and self.stamina > 5 and not self.log
@@ -728,7 +736,7 @@ class Game:
             self.stamina = min(100.0, self.stamina + 14 * dt)
 
         # ---- the fire
-        burn = 0.42 + 0.25 * max(0.0, gust)
+        burn = 0.6 + 0.3 * max(0.0, gust)
         if self.fuel > 0:
             self.fuel = max(0.0, self.fuel - burn * dt)
             if self.fuel == 0:
@@ -745,6 +753,17 @@ class Game:
                 self.say(text, 4, (255, 170, 90))
             elif self.fuel > lvl + 8:
                 self.warned.discard(lvl)
+        # big gusts tear at the fire now and then
+        if self.t > self.next_gust and self.fuel > 0:
+            self.next_gust = self.t + rng.uniform(55, 110)
+            self.gust_until = self.t + 2.5
+            hit = rng.uniform(8, 16) * (0.6 + 0.6 * self.night)
+            self.fuel = max(1.0, self.fuel - hit)
+            far = math.hypot(self.px, self.py) > self.light_r
+            self.say("A gust howls through the camp. The fire gutters." if not far else
+                     "Wind howls through the trees. Behind you, the firelight shrinks.", 4, (255, 170, 90))
+        if self.t < self.gust_until:
+            self.wind = 1.6
         self._step_fire(dt)
 
         # ---- warmth
@@ -858,8 +877,9 @@ class Game:
         dawn = self.night > 0.93
         # is the player looking at it?
         ang_to = math.atan2(-dy, -dx)
-        watched = (abs(wrap_angle(ang_to - self.a)) < FOV * 0.42 and dist < FOG * 1.7
-                   and self.los(self.px, self.py, self.cr_x, self.cr_y))
+        # anywhere on screen counts, as long as its eyes would show through the snow
+        watched = (abs(wrap_angle(ang_to - self.a)) < FOV * 0.48 and dist < FOG * 2.2
+                   and self.los(self.px, self.py, self.cr_x, self.cr_y, skip=2.4))
         self.cr_watched = watched
         if watched and not self.cr_seen:
             self.cr_seen = True
@@ -888,6 +908,12 @@ class Game:
             else:
                 self.cr_stare = max(0.0, self.cr_stare - dt)
             tx, ty = self.px, self.py
+            if not watched and dist < 6:
+                speed *= 0.5 + 0.5 * dist / 6          # it creeps the last few steps
+                rel = abs(wrap_angle(ang_to - self.a))
+                if dist < 4.5 and rel > FOV / 2 and self.t > self.cr_warned:
+                    self.cr_warned = self.t + 10
+                    self.say("Something is right behind you.", 2.5, (230, 120, 110))
             if dist > 26:
                 self._teleport_behind(14, 20)
                 return
@@ -914,7 +940,8 @@ class Game:
             self._print(self.cr_x, self.cr_y, 5)
         dist = math.hypot(self.px - self.cr_x, self.py - self.cr_y)
         self.cr_dist = dist
-        self.fear = 0.0 if dawn else max(0.0, min(1.0, (9.0 - dist) / 7.0))
+        self.fear = 0.0 if dawn else max(0.0, min(1.0, (10.0 - dist) / 8.0))
+        self.fear_side = wrap_angle(math.atan2(self.cr_y - self.py, self.cr_x - self.px) - self.a)
         if dist < 0.95 and not dawn:
             self._die("caught")
 
@@ -1034,17 +1061,17 @@ class Game:
             for x in range(W):
                 wx = wx0 + sx * x
                 wy = wy0 + sy * x
-                fp = prints.get(int(wx * 2 + 4096) * 10000 + int(wy * 2 + 4096)) if prints and z < 9 else None
-                if fp is not None:
-                    lv = fp[0]
-                    c = '"' if lv == 4 else "v"
-                else:
-                    ix = int(wx * inv + 65536)
-                    iy = int(wy * inv + 65536)
-                    g = GROUND[((ix * 73856093) ^ (iy * 19349663) ^ salt) & 1023]
-                    if g is None:
-                        continue
-                    c, lv = g
+                ix = int(wx * inv + 65536)
+                iy = int(wy * inv + 65536)
+                g = GROUND[((ix * 73856093) ^ (iy * 19349663) ^ salt) & 1023]
+                if g is None:
+                    continue
+                c, lv = g
+                if prints and z < 9:
+                    fp = prints.get(int(wx * 2 + 4096) * 10000 + int(wy * 2 + 4096))
+                    if fp is not None:
+                        lv = fp[0]
+                        c = '"' if lv == 4 else "v"
                 d2 = wx * wx + wy * wy
                 q = d2 / r2
                 lq = int(FL * 12 / (1 + q + q * q))
@@ -1148,7 +1175,14 @@ class Game:
             n = int(self.fear * self.fear * W * VH * 0.05)
             for _ in range(n):
                 e = rngf.random() ** 2 * (0.12 + 0.18 * self.fear)
-                side = rngf.randrange(4)
+                # heavier on the side it's coming from (left, right, or both when behind)
+                fs = self.fear_side
+                if abs(fs) > 2.3:
+                    side = rngf.choice((0, 1, 3))
+                elif rngf.random() < 0.75:
+                    side = 1 if fs > 0 else 0
+                else:
+                    side = rngf.randrange(4)
                 if side < 2:
                     x = int(e * W) if side == 0 else W - 1 - int(e * W)
                     y = rngf.randrange(VH)
