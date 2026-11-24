@@ -523,7 +523,7 @@ class Game:
         self.prints = {}
         self.msgs = []
         self.items = []
-        for _ in range(16):
+        for _ in range(30):
             self._spawn_item("sticks")
         for _ in range(6):
             self._spawn_item("log")
@@ -554,7 +554,7 @@ class Game:
         rng = self.rng
         for _ in range(200):
             ang = rng.uniform(0, TAU)
-            d = rng.uniform(8, WORLD_R - 3) if kind == "sticks" else rng.uniform(14, WORLD_R - 2)
+            d = rng.uniform(6, WORLD_R - 4) if kind == "sticks" else rng.uniform(14, WORLD_R - 2)
             x, y = math.cos(ang) * d, math.sin(ang) * d
             if not self.tree_hit(x, y, 0.9):
                 self.items.append(Item(x, y, kind))
@@ -728,7 +728,7 @@ class Game:
             self.stamina = min(100.0, self.stamina + 14 * dt)
 
         # ---- the fire
-        burn = 0.55 + 0.35 * max(0.0, gust)
+        burn = 0.42 + 0.25 * max(0.0, gust)
         if self.fuel > 0:
             self.fuel = max(0.0, self.fuel - burn * dt)
             if self.fuel == 0:
