@@ -58,4 +58,4 @@ Options: `--speed 0.25`, `--snow 0-4`, `--seed N`.
 
 ## Credit
 
-Inspired by a TikTok of someone's Python ASCII-art fire in a snowy forest.
+Inspired by a TikTok from [@meatballsammichh](https://www.tiktok.com/@meatballsammichh) of their Python ASCII-art fire in a snowy forest.
