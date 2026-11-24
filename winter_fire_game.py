@@ -1474,6 +1474,11 @@ def title_frame(scene, W, H, blink):
                 ch[y * W + x + j] = c
                 key[y * W + x + j] = k
 
+    # dark band behind the title text so it reads over the trees
+    bx0, bx1 = max(0, min(x0, (W - 64) // 2) - 3), min(W, max(x0 + width, (W + 64) // 2) + 3)
+    for y in range(max(0, y0 - 1), min(H, y0 + 15)):
+        for x in range(bx0, bx1):
+            ch[y * W + x] = " "
     if width < W:
         for r in range(5):
             put(x0 + 1, y0 + r + 1, rows[r].replace("#", ":"), pk(40, 45, 60), True)
