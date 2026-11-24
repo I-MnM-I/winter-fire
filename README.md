@@ -17,9 +17,9 @@ python3 winter_fire_game.py
 
 It's 22:00 and the fire is burning low. The only wood is out in the dark between the trees. Bring back sticks and logs and walk into the firelight to feed the fire. Make it to 06:00.
 
-- The fire is always burning down. If it goes out, you get a few seconds to save the embers.
+- The fire is always burning down, and every minute or two a gust tears through camp and knocks it lower. If it goes out, you get a few seconds to save the embers.
 - Away from the fire you get colder. Stay out too long and you freeze.
-- Something lives in the forest. It won't come into the firelight, and the smaller the fire gets, the closer it can come.
+- Something lives in the forest. It won't come into the firelight, and the smaller the fire gets, the closer it can come. When it's near, the edges of your vision crawl red, heaviest on the side it's coming from.
 - Notes left by the last people who camped here tell you how it behaves.
 
 | Key | Action |
@@ -34,6 +34,14 @@ It's 22:00 and the fire is burning low. The only wood is out in the dark between
 Options: `--night 5` sets the night length in minutes (default 7). `--seed N` picks a forest.
 
 In terminals that support the kitty keyboard protocol (kitty, WezTerm, foot, Ghostty, Alacritty), movement is precise. In others (Konsole, GNOME Terminal), holding a key works through key repeat, so there's a short pause after you first press it.
+
+### Playtesting
+
+`tools/playtest.py` plays full nights with a bot that only uses what a player could see, and reports how each night ended. Handy for checking balance after a change:
+
+```bash
+python3 tools/playtest.py -n 10
+```
 
 ## The animation
 
