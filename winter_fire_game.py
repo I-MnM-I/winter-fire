@@ -1093,7 +1093,8 @@ class Game:
             if kind == 0:
                 L = FL * self._fall((obj.x * obj.x + obj.y * obj.y) / r2)
                 keys = (lit(obj.col, amb, L, f), lit((185, 195, 210), amb, L, f), lit((80, 60, 42), amb, L, f))
-                self._draw_tree(ch, key, obj, sx, bot - obj.h / z * Fy, bot, obj.h * 0.24 / z * Fx, keys)
+                dens = 16 if z > 2.4 else max(2, int(16 * (z - 0.5) / 1.9))
+                self._draw_tree(ch, key, obj, sx, bot - obj.h / z * Fy, bot, obj.h * 0.24 / z * Fx, keys, dens)
             elif kind == 1:
                 L = FL * 1.2
                 keys = (lit((105, 62, 32), amb, L, f), lit((110, 108, 104), amb, L, f))
@@ -1173,7 +1174,7 @@ class Game:
     def _fall(q):
         return 1.0 / (1.0 + q + q * q)
 
-    def _draw_tree(self, ch, key, tr, sx, top, bot, hw, keys):
+    def _draw_tree(self, ch, key, tr, sx, top, bot, hw, keys, dens=16):
         W, VH = self.W, self.VH
         rows, spans = TREE_TEX[tr.tex]
         hh = bot - top
@@ -1192,6 +1193,8 @@ class Game:
             xb = min(W, int(sx + (hi - 11.5) / su) + 1)
             base = y * W
             for x in range(xa, xb):
+                if dens < 16 and ((x * 7 + y * 13) & 15) >= dens:
+                    continue
                 u = int((x + 0.5 - sx) * su + 12.5)
                 if 0 <= u < TU:
                     e = trow[u]
@@ -1248,7 +1251,7 @@ class Game:
         hw = 0.7 / z * self.Fx
         if hgt < 1:
             return
-        ef = f ** 0.35
+        ef = f ** 0.15
         nfc = len(FIRE_CHARS) - 1
         top = bot - hgt
         for y in range(max(0, int(top)), min(VH, int(bot) + 1)):
