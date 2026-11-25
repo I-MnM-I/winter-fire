@@ -33,7 +33,9 @@ It's 22:00 and the fire is burning low. The only wood is out in the dark between
 
 Options: `--night 5` sets the night length in minutes (default 7). `--seed N` picks a forest.
 
-In terminals that support the kitty keyboard protocol (kitty, WezTerm, foot, Ghostty, Alacritty), movement is precise. In others (Konsole, GNOME Terminal), holding a key works through key repeat, so there's a short pause after you first press it.
+In terminals that support the kitty keyboard protocol (kitty, WezTerm, foot, Ghostty, Alacritty), movement is precise. In others, holding a key works through key repeat, so there's a short pause after you first press it, and only the last key you pressed keeps repeating.
+
+If a key doesn't seem to do anything, run `python3 tools/keytest.py` in the same terminal and press it. It shows exactly what your terminal sends and how the game reads it.
 
 ### Playtesting
 

@@ -33,7 +33,9 @@ TAU = math.tau
 SIM_HZ = 30.0
 FOV = 1.35                 # horizontal field of view (radians)
 EYE = 1.2                  # eye height (world units)
-FOG = 7.5                  # visibility falloff distance in the blizzard
+FOG = 11.0                 # visibility falloff distance in the blizzard
+SIGHT = 16.5               # how far away you can pin the creature down by looking at it
+HAZE = (46, 50, 62)        # colour of the blizzard far away, scaled by moonlight
 WORLD_R = 36.0             # how far from the fire you can wander
 NIGHT_LEN = 420.0          # seconds of real time from 22:00 to 06:00
 FUEL_MAX = 100.0
@@ -56,9 +58,10 @@ def pk(r, g, b):
 def lit(base, amb, L, f):
     """Colour of a surface under moonlight `amb` and firelight `L`, faded by fog `f`."""
     r, g, b = base
-    return pk((r * (amb + 2.0 * L) + 55 * L) * f,
-              (g * (amb + 1.0 * L) + 22 * L) * f,
-              (b * (amb + 0.15 * L)) * f)
+    h = (1.0 - f) * amb          # far things fade into the pale blizzard haze, not into black
+    return pk((r * (amb + 2.0 * L) + 55 * L) * f + HAZE[0] * h,
+              (g * (amb + 1.0 * L) + 22 * L) * f + HAZE[1] * h,
+              (b * (amb + 0.15 * L)) * f + HAZE[2] * h)
 
 
 _ESC = {}
@@ -382,6 +385,17 @@ def parse_keys(data):
     return evs
 
 
+def incomplete_csi(seq):
+    """True if `seq` (starting with Esc) is the start of an escape sequence that hasn't finished."""
+    if len(seq) == 1:
+        return True
+    if seq[1] == "O":
+        return len(seq) < 3
+    if seq[1] != "[":
+        return False
+    return not any("\x40" <= c <= "\x7e" for c in seq[2:])
+
+
 def _csi(params, final):
     if params.startswith(("?", ">", "<", "=")):
         return ("", 0, False)
@@ -413,6 +427,8 @@ class Terminal:
         self.old = termios.tcgetattr(self.fd)
         tty.setcbreak(self.fd)
         self.out = sys.stdout
+        self.partial = ""
+        self.partial_since = 0.0
         # alt screen, hide cursor, ask for key release events (ignored where unsupported)
         self.out.write("\x1b[?1049h\x1b[?25l\x1b[2J\x1b[>11u")
         self.out.flush()
@@ -423,12 +439,23 @@ class Terminal:
         self.termios.tcsetattr(self.fd, self.termios.TCSADRAIN, self.old)
 
     def read(self):
-        data = ""
+        data = self.partial
         while select.select([self.fd], [], [], 0)[0]:
             chunk = os.read(self.fd, 1024).decode(errors="ignore")
             if not chunk:
                 break
             data += chunk
+        # an escape sequence can arrive split across reads: keep the unfinished tail for next time
+        self.partial = ""
+        k = data.rfind("\x1b")
+        if k >= 0 and k > len(data) - 32 and incomplete_csi(data[k:]):
+            if self.partial_since and time.perf_counter() - self.partial_since > 0.05:
+                self.partial_since = 0.0          # a lone Esc press, not the start of a sequence
+            else:
+                self.partial_since = self.partial_since or time.perf_counter()
+                data, self.partial = data[:k], data[k:]
+        else:
+            self.partial_since = 0.0
         return parse_keys(data) if data else []
 
 
@@ -499,7 +526,7 @@ class Game:
             t.h = rng.uniform(3.0, 6.0)
             t.tex = rng.randrange(len(TREE_TEX))
             j = rng.uniform(0.8, 1.15)
-            t.col = (82 * j, 112 * j, 112 * j)
+            t.col = (95 * j, 150 * j, 125 * j)
             self.trees.append(t)
             self.buckets.setdefault((int(x // 4), int(y // 4)), []).append(t)
 
@@ -618,7 +645,7 @@ class Game:
 
     def ambient(self):
         dawn = max(0.0, (self.night - 0.88) / 0.12)
-        return 0.42 + 0.5 * dawn
+        return 0.75 + 0.3 * dawn
 
     def clock(self):
         mins = int(22 * 60 + self.night * 8 * 60) % (24 * 60)
@@ -878,7 +905,7 @@ class Game:
         # is the player looking at it?
         ang_to = math.atan2(-dy, -dx)
         # anywhere on screen counts, as long as its eyes would show through the snow
-        watched = (abs(wrap_angle(ang_to - self.a)) < FOV * 0.48 and dist < FOG * 2.2
+        watched = (abs(wrap_angle(ang_to - self.a)) < FOV * 0.48 and dist < SIGHT
                    and self.los(self.px, self.py, self.cr_x, self.cr_y, skip=2.4))
         self.cr_watched = watched
         if watched and not self.cr_seen:
@@ -1080,7 +1107,7 @@ class Game:
 
         # ---- collect sprites
         spr = []
-        zmax = FOG * 2.4
+        zmax = FOG * 2.0
         for tr in self.trees:
             dx, dy = tr.x - px, tr.y - py
             z = dx * ca + dy * sa
@@ -1119,8 +1146,9 @@ class Game:
             bot = hz + EYE / z * Fy
             if kind == 0:
                 L = FL * self._fall((obj.x * obj.x + obj.y * obj.y) / r2)
+                f = math.exp(-z / (FOG * 1.6))         # silhouettes carry further than snow
                 keys = (lit(obj.col, amb, L, f), lit((185, 195, 210), amb, L, f), lit((80, 60, 42), amb, L, f))
-                dens = 16 if z > 2.4 else max(2, int(16 * (z - 0.5) / 1.9))
+                dens = max(2, int(16 * (z - 0.5) / 1.9)) if z < 2.4 else max(6, min(16, int(16 * 2.2 * f)))
                 self._draw_tree(ch, key, obj, sx, bot - obj.h / z * Fy, bot, obj.h * 0.24 / z * Fx, keys, dens)
             elif kind == 1:
                 L = FL * 1.2

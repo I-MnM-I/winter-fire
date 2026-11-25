@@ -72,7 +72,7 @@ class Bot:
         dx, dy = G.cr_x - G.px, G.cr_y - G.py
         d = math.hypot(dx, dy)
         ang = g.wrap_angle(math.atan2(dy, dx) - G.a)
-        return abs(ang) < g.FOV * 0.48 and d < g.FOG * 2.2 and G.los(G.px, G.py, G.cr_x, G.cr_y, skip=2.4)
+        return abs(ang) < g.FOV * 0.48 and d < g.SIGHT and G.los(G.px, G.py, G.cr_x, G.cr_y, skip=2.4)
 
     def visible_items(self):
         G = self.G
